@@ -304,9 +304,13 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
         const stashId = extractStashId(info.linkUrl);
         if (stashId) {
           console.log("[StashDB-Whisparr] Adding scene from clicked link:", stashId);
-          // Get metadata from page for this scene (try to find in scene list)
-          const metadataResponse = await browser.tabs.sendMessage(tab.id, { action: "getAllScenesWithMetadata" });
-          const sceneMetadata = metadataResponse?.scenes?.find(s => s.stashId === stashId) || { stashId };
+          // Get metadata from the clicked element specifically
+          const metadataResponse = await browser.tabs.sendMessage(tab.id, { 
+            action: "getClickedSceneMetadata", 
+            stashId 
+          });
+          const sceneMetadata = metadataResponse?.metadata || { stashId };
+          console.log("[StashDB-Whisparr] Got metadata for clicked scene:", sceneMetadata);
           await addSingleSceneWithMetadata(stashId, sceneMetadata, tab.id);
           return;
         }
