@@ -52,7 +52,7 @@ async function loadBatchStatus() {
 function renderBatches() {
   if (batches.length === 0) {
     emptyState.style.display = 'flex';
-    batchList.innerHTML = '';
+    batchList.replaceChildren();
     footer.style.display = 'none';
     isFirstRender = true;
     expandedBatchIds.clear();
@@ -75,12 +75,13 @@ function renderBatches() {
     isFirstRender = false;
   }
 
-  // Render batches (newest first)
-  batchList.innerHTML = batches
+  // Render batches (newest first) using DOM methods
+  const fragment = document.createDocumentFragment();
+  batches
     .slice()
     .reverse()
-    .map(batch => renderBatch(batch, expandedBatchIds.has(batch.id)))
-    .join('');
+    .forEach(batch => fragment.appendChild(renderBatch(batch, expandedBatchIds.has(batch.id))));
+  batchList.replaceChildren(fragment);
 
   // Attach event listeners
   attachEventListeners();
@@ -91,50 +92,112 @@ function renderBatch(batch, expanded = false) {
   const stats = getStats(batch.scenes);
   const time = formatTime(batch.timestamp);
   
-  return `
-    <div class="batch ${expanded ? 'expanded' : ''}" data-batch-id="${batch.id}">
-      <div class="batch-header">
-        <div>
-          <span class="batch-time">${time}</span>
-          <div class="batch-stats">
-            ${stats.success > 0 ? `<span class="batch-stat success">${stats.success} done</span>` : ''}
-            ${stats.error > 0 ? `<span class="batch-stat error">${stats.error} failed</span>` : ''}
-            ${stats.pending > 0 ? `<span class="batch-stat pending">${stats.pending} pending</span>` : ''}
-          </div>
-        </div>
-        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </div>
-      <div class="batch-scenes">
-        ${batch.scenes.map(scene => renderScene(batch.id, scene)).join('')}
-      </div>
-    </div>
-  `;
+  const batchEl = document.createElement('div');
+  batchEl.className = `batch ${expanded ? 'expanded' : ''}`;
+  batchEl.dataset.batchId = batch.id;
+
+  // Create batch header
+  const header = document.createElement('div');
+  header.className = 'batch-header';
+
+  const headerInfo = document.createElement('div');
+  
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'batch-time';
+  timeSpan.textContent = time;
+  headerInfo.appendChild(timeSpan);
+
+  const statsDiv = document.createElement('div');
+  statsDiv.className = 'batch-stats';
+  
+  if (stats.success > 0) {
+    const successStat = document.createElement('span');
+    successStat.className = 'batch-stat success';
+    successStat.textContent = `${stats.success} done`;
+    statsDiv.appendChild(successStat);
+  }
+  if (stats.error > 0) {
+    const errorStat = document.createElement('span');
+    errorStat.className = 'batch-stat error';
+    errorStat.textContent = `${stats.error} failed`;
+    statsDiv.appendChild(errorStat);
+  }
+  if (stats.pending > 0) {
+    const pendingStat = document.createElement('span');
+    pendingStat.className = 'batch-stat pending';
+    pendingStat.textContent = `${stats.pending} pending`;
+    statsDiv.appendChild(pendingStat);
+  }
+  headerInfo.appendChild(statsDiv);
+  header.appendChild(headerInfo);
+
+  // Create chevron SVG
+  const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  chevron.setAttribute('class', 'chevron');
+  chevron.setAttribute('width', '16');
+  chevron.setAttribute('height', '16');
+  chevron.setAttribute('viewBox', '0 0 24 24');
+  chevron.setAttribute('fill', 'none');
+  chevron.setAttribute('stroke', 'currentColor');
+  chevron.setAttribute('stroke-width', '2');
+  const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  polyline.setAttribute('points', '6 9 12 15 18 9');
+  chevron.appendChild(polyline);
+  header.appendChild(chevron);
+
+  batchEl.appendChild(header);
+
+  // Create scenes container
+  const scenesDiv = document.createElement('div');
+  scenesDiv.className = 'batch-scenes';
+  batch.scenes.forEach(scene => scenesDiv.appendChild(renderScene(batch.id, scene)));
+  batchEl.appendChild(scenesDiv);
+
+  return batchEl;
 }
 
 // Render a single scene row
 function renderScene(batchId, scene) {
   const shortId = scene.stashId.substring(0, 8);
   const showRetry = scene.status === 'error';
-  const errorTooltip = scene.error ? `data-error="${escapeHtml(scene.error)}"` : '';
   
-  return `
-    <div class="scene" data-scene-id="${scene.stashId}">
-      <div class="scene-info">
-        <div class="scene-title">${escapeHtml(scene.title || 'Unknown Scene')}</div>
-        <div class="scene-id">${shortId}...</div>
-      </div>
-      <span class="status-badge ${scene.status} ${scene.error ? 'error-tooltip' : ''}" ${errorTooltip}>
-        ${getStatusLabel(scene.status)}
-      </span>
-      ${showRetry ? `
-        <button class="scene-retry" data-batch-id="${batchId}" data-scene-id="${scene.stashId}">
-          Retry
-        </button>
-      ` : ''}
-    </div>
-  `;
+  const sceneEl = document.createElement('div');
+  sceneEl.className = 'scene';
+  sceneEl.dataset.sceneId = scene.stashId;
+
+  const sceneInfo = document.createElement('div');
+  sceneInfo.className = 'scene-info';
+
+  const titleDiv = document.createElement('div');
+  titleDiv.className = 'scene-title';
+  titleDiv.textContent = scene.title || 'Unknown Scene';
+  sceneInfo.appendChild(titleDiv);
+
+  const idDiv = document.createElement('div');
+  idDiv.className = 'scene-id';
+  idDiv.textContent = `${shortId}...`;
+  sceneInfo.appendChild(idDiv);
+
+  sceneEl.appendChild(sceneInfo);
+
+  const badge = document.createElement('span');
+  badge.className = `status-badge ${scene.status}${scene.error ? ' error-tooltip' : ''}`;
+  if (scene.error) {
+    badge.dataset.error = scene.error;
+  }
+  badge.textContent = getStatusLabel(scene.status);
+  sceneEl.appendChild(badge);
+
+  if (showRetry) {
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'scene-retry';
+    retryBtn.dataset.batchId = batchId;
+    retryBtn.dataset.sceneId = scene.stashId;
+    retryBtn.textContent = 'Retry';
+    sceneEl.appendChild(retryBtn);
+  }
+
+  return sceneEl;
 }
 
 // Get statistics for a batch
@@ -177,13 +240,6 @@ function formatTime(timestamp) {
     hour: '2-digit',
     minute: '2-digit'
   });
-}
-
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 // Attach event listeners to rendered elements

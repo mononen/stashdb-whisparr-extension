@@ -68,7 +68,7 @@ async function testConnection(e, savedRootFolder = null, savedQualityProfile = n
 
     // Populate quality profiles dropdown
     const profileSelect = document.getElementById("qualityProfileId");
-    profileSelect.innerHTML = "";
+    profileSelect.replaceChildren();
     profileSelect.disabled = false;
 
     profiles.forEach(profile => {
@@ -85,7 +85,7 @@ async function testConnection(e, savedRootFolder = null, savedQualityProfile = n
 
     // Populate root folders dropdown
     const folderSelect = document.getElementById("rootFolderPath");
-    folderSelect.innerHTML = "";
+    folderSelect.replaceChildren();
     folderSelect.disabled = false;
 
     folders.forEach(folder => {
@@ -106,10 +106,21 @@ async function testConnection(e, savedRootFolder = null, savedQualityProfile = n
     showConnectionStatus(`Connection failed: ${error.message}`, "error");
     
     // Reset dropdowns
-    document.getElementById("qualityProfileId").innerHTML = '<option value="">Test connection first...</option>';
-    document.getElementById("qualityProfileId").disabled = true;
-    document.getElementById("rootFolderPath").innerHTML = '<option value="">Test connection first...</option>';
-    document.getElementById("rootFolderPath").disabled = true;
+    const qualitySelect = document.getElementById("qualityProfileId");
+    qualitySelect.replaceChildren();
+    const qualityOption = document.createElement("option");
+    qualityOption.value = "";
+    qualityOption.textContent = "Test connection first...";
+    qualitySelect.appendChild(qualityOption);
+    qualitySelect.disabled = true;
+
+    const rootSelect = document.getElementById("rootFolderPath");
+    rootSelect.replaceChildren();
+    const rootOption = document.createElement("option");
+    rootOption.value = "";
+    rootOption.textContent = "Test connection first...";
+    rootSelect.appendChild(rootOption);
+    rootSelect.disabled = true;
   } finally {
     testBtn.disabled = false;
     testBtn.textContent = "Test Connection";
