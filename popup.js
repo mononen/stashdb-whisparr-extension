@@ -17,9 +17,8 @@ const resetFiltersBtn = document.getElementById('resetFiltersBtn');
 // State
 // ============================================
 let batches = [];
-let filters = null;
+let filters = [];  // Now an array of individual filter objects
 let expandedBatchIds = new Set();
-let expandedFilterCategories = new Set();
 let isFirstRender = true;
 
 // ============================================
@@ -180,8 +179,30 @@ function renderBatch(batch, expanded = false) {
     pendingStat.textContent = `${stats.pending} pending`;
     statsDiv.appendChild(pendingStat);
   }
+  if (stats.cancelled > 0) {
+    const cancelledStat = document.createElement('span');
+    cancelledStat.className = 'batch-stat cancelled';
+    cancelledStat.textContent = `${stats.cancelled} cancelled`;
+    statsDiv.appendChild(cancelledStat);
+  }
+  if (stats.removed > 0) {
+    const removedStat = document.createElement('span');
+    removedStat.className = 'batch-stat removed';
+    removedStat.textContent = `${stats.removed} removed`;
+    statsDiv.appendChild(removedStat);
+  }
   headerInfo.appendChild(statsDiv);
   header.appendChild(headerInfo);
+  
+  // Add cancel button if there are pending scenes
+  if (stats.pending > 0) {
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'batch-cancel';
+    cancelBtn.dataset.batchId = batch.id;
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.title = 'Cancel remaining scenes';
+    header.appendChild(cancelBtn);
+  }
 
   // Create chevron SVG
   const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -211,6 +232,7 @@ function renderBatch(batch, expanded = false) {
 function renderScene(batchId, scene) {
   const shortId = scene.stashId.substring(0, 8);
   const showRetry = scene.status === 'error';
+  const showUndo = ['added', 'searched'].includes(scene.status);
   
   const sceneEl = document.createElement('div');
   sceneEl.className = 'scene';
@@ -251,6 +273,16 @@ function renderScene(batchId, scene) {
     sceneEl.appendChild(retryBtn);
   }
 
+  if (showUndo) {
+    const undoBtn = document.createElement('button');
+    undoBtn.className = 'scene-undo';
+    undoBtn.dataset.batchId = batchId;
+    undoBtn.dataset.sceneId = scene.stashId;
+    undoBtn.textContent = 'Undo';
+    undoBtn.title = 'Remove from Whisparr';
+    sceneEl.appendChild(undoBtn);
+  }
+
   return sceneEl;
 }
 
@@ -259,7 +291,9 @@ function getStats(scenes) {
     success: scenes.filter(s => ['added', 'searched', 'exists'].includes(s.status)).length,
     error: scenes.filter(s => s.status === 'error').length,
     filtered: scenes.filter(s => s.status === 'filtered').length,
-    pending: scenes.filter(s => ['waiting', 'adding'].includes(s.status)).length
+    pending: scenes.filter(s => ['waiting', 'adding'].includes(s.status)).length,
+    cancelled: scenes.filter(s => s.status === 'cancelled').length,
+    removed: scenes.filter(s => s.status === 'removed').length
   };
 }
 
@@ -271,7 +305,10 @@ function getStatusLabel(status) {
     searched: 'Searched',
     exists: 'Exists',
     error: 'Error',
-    filtered: 'Filtered'
+    filtered: 'Filtered',
+    cancelled: 'Cancelled',
+    removing: 'Removing...',
+    removed: 'Removed'
   };
   return labels[status] || status;
 }
@@ -296,9 +333,12 @@ function formatTime(timestamp) {
 }
 
 function attachBatchEventListeners() {
-  // Batch header toggle
+  // Batch header toggle (but not when clicking cancel button)
   document.querySelectorAll('.batch-header').forEach(header => {
-    header.addEventListener('click', () => {
+    header.addEventListener('click', (e) => {
+      // Don't toggle if clicking cancel button
+      if (e.target.classList.contains('batch-cancel')) return;
+      
       const batchEl = header.closest('.batch');
       const batchId = batchEl.dataset.batchId;
       batchEl.classList.toggle('expanded');
@@ -307,6 +347,28 @@ function attachBatchEventListeners() {
         expandedBatchIds.add(batchId);
       } else {
         expandedBatchIds.delete(batchId);
+      }
+    });
+  });
+
+  // Batch cancel buttons
+  document.querySelectorAll('.batch-cancel').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const batchId = btn.dataset.batchId;
+      
+      btn.disabled = true;
+      btn.textContent = 'Cancelling...';
+      
+      try {
+        await browser.runtime.sendMessage({
+          action: 'cancelBatch',
+          batchId
+        });
+      } catch (error) {
+        console.error('[Popup] Cancel failed:', error);
+        btn.disabled = false;
+        btn.textContent = 'Cancel';
       }
     });
   });
@@ -331,6 +393,30 @@ function attachBatchEventListeners() {
         console.error('[Popup] Retry failed:', error);
         btn.disabled = false;
         btn.textContent = 'Retry';
+      }
+    });
+  });
+
+  // Individual scene undo buttons
+  document.querySelectorAll('.scene-undo').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const batchId = btn.dataset.batchId;
+      const sceneId = btn.dataset.sceneId;
+      
+      btn.disabled = true;
+      btn.textContent = '...';
+      
+      try {
+        await browser.runtime.sendMessage({
+          action: 'undoScene',
+          batchId,
+          sceneId
+        });
+      } catch (error) {
+        console.error('[Popup] Undo failed:', error);
+        btn.disabled = false;
+        btn.textContent = 'Undo';
       }
     });
   });
@@ -362,12 +448,17 @@ clearAllBtn.addEventListener('click', async () => {
 });
 
 // ============================================
-// Filter Management
+// Filter Management (Individual Filter Cards)
 // ============================================
+
+const filterList = document.getElementById('filterList');
+const filterEmpty = document.getElementById('filterEmpty');
+const addFilterBtn = document.getElementById('addFilterBtn');
+
 async function loadFilters() {
   try {
     const response = await browser.runtime.sendMessage({ action: 'getFilters' });
-    filters = response?.filters || null;
+    filters = response?.filters || [];
     renderFilters();
   } catch (error) {
     console.error('[Popup] Error loading filters:', error);
@@ -375,164 +466,165 @@ async function loadFilters() {
 }
 
 function renderFilters() {
-  if (!filters) return;
-  
-  const categories = ['studios', 'performers', 'names', 'tags'];
-  let totalFilterCount = 0;
-  
-  categories.forEach(category => {
-    const config = filters[category];
-    if (!config) return;
-    
-    const count = config.values?.length || 0;
-    totalFilterCount += count;
-    
-    // Update count badge
-    const countEl = document.querySelector(`[data-count="${category}"]`);
-    if (countEl) {
-      countEl.textContent = count;
-      countEl.style.display = count > 0 ? 'inline' : 'none';
-    }
-    
-    // Update mode select
-    const modeSelect = document.querySelector(`select[data-category="${category}"][data-setting="mode"]`);
-    if (modeSelect) {
-      modeSelect.value = config.mode || 'blocklist';
-    }
-    
-    // Update matchLogic select
-    const logicSelect = document.querySelector(`select[data-category="${category}"][data-setting="matchLogic"]`);
-    if (logicSelect) {
-      logicSelect.value = config.matchLogic || 'or';
-    }
-    
-    // Update chips
-    const chipsContainer = document.querySelector(`.filter-chips[data-category="${category}"]`);
-    if (chipsContainer) {
-      renderFilterChips(chipsContainer, category, config.values || []);
-    }
-    
-    // Restore expanded state
-    const categoryEl = document.querySelector(`.filter-category[data-category="${category}"]`);
-    if (categoryEl && expandedFilterCategories.has(category)) {
-      categoryEl.classList.add('expanded');
-    }
-  });
+  // Ensure filters is an array
+  if (!Array.isArray(filters)) {
+    filters = [];
+  }
   
   // Update filter badge in tab bar
-  if (totalFilterCount > 0) {
-    filterBadge.textContent = totalFilterCount;
+  const enabledCount = filters.filter(f => f.enabled).length;
+  if (filters.length > 0) {
+    filterBadge.textContent = enabledCount;
     filterBadge.style.display = 'inline';
   } else {
     filterBadge.style.display = 'none';
   }
-}
-
-function renderFilterChips(container, category, values) {
-  container.replaceChildren();
   
-  if (values.length === 0) {
-    const emptyEl = document.createElement('div');
-    emptyEl.className = 'filter-empty';
-    emptyEl.textContent = 'No filters added';
-    container.appendChild(emptyEl);
+  // Show/hide empty state
+  if (filters.length === 0) {
+    filterEmpty.style.display = 'block';
+    // Remove all filter cards
+    filterList.querySelectorAll('.filter-card').forEach(card => card.remove());
     return;
   }
   
-  values.forEach(value => {
-    const chip = document.createElement('div');
-    chip.className = 'filter-chip';
-    
-    const textSpan = document.createElement('span');
-    textSpan.textContent = value;
-    chip.appendChild(textSpan);
-    
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'filter-chip-remove';
-    removeBtn.innerHTML = '&times;';
-    removeBtn.dataset.category = category;
-    removeBtn.dataset.value = value;
-    removeBtn.addEventListener('click', () => removeFilterValue(category, value));
-    chip.appendChild(removeBtn);
-    
-    container.appendChild(chip);
+  filterEmpty.style.display = 'none';
+  
+  // Render filter cards
+  const fragment = document.createDocumentFragment();
+  filters.forEach(filter => {
+    fragment.appendChild(renderFilterCard(filter));
   });
+  
+  // Replace existing cards
+  filterList.querySelectorAll('.filter-card').forEach(card => card.remove());
+  filterList.appendChild(fragment);
+}
+
+function renderFilterCard(filter) {
+  const card = document.createElement('div');
+  card.className = `filter-card${filter.enabled ? '' : ' disabled'}`;
+  card.dataset.filterId = filter.id;
+  
+  // Header row: Toggle, Type dropdown, Mode button, Delete button
+  const header = document.createElement('div');
+  header.className = 'filter-card-header';
+  
+  // Enable/Disable toggle
+  const toggle = document.createElement('label');
+  toggle.className = 'filter-toggle';
+  const toggleInput = document.createElement('input');
+  toggleInput.type = 'checkbox';
+  toggleInput.checked = filter.enabled;
+  toggleInput.addEventListener('change', () => toggleFilter(filter.id));
+  toggle.appendChild(toggleInput);
+  const toggleSlider = document.createElement('span');
+  toggleSlider.className = 'filter-toggle-slider';
+  toggle.appendChild(toggleSlider);
+  header.appendChild(toggle);
+  
+  // Type dropdown
+  const typeSelect = document.createElement('select');
+  typeSelect.className = 'filter-type-select';
+  ['studio', 'performer', 'name', 'tag'].forEach(type => {
+    const option = document.createElement('option');
+    option.value = type;
+    option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+    if (filter.type === type) option.selected = true;
+    typeSelect.appendChild(option);
+  });
+  typeSelect.addEventListener('change', () => updateFilter(filter.id, { type: typeSelect.value }));
+  header.appendChild(typeSelect);
+  
+  // Mode button (Block/Allow toggle)
+  const modeBtn = document.createElement('button');
+  modeBtn.className = `filter-mode-btn${filter.mode === 'allowlist' ? ' allowlist' : ''}`;
+  modeBtn.textContent = filter.mode === 'allowlist' ? 'Allow' : 'Block';
+  modeBtn.addEventListener('click', () => {
+    const newMode = filter.mode === 'blocklist' ? 'allowlist' : 'blocklist';
+    updateFilter(filter.id, { mode: newMode });
+  });
+  header.appendChild(modeBtn);
+  
+  // Delete button
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'filter-delete-btn';
+  deleteBtn.innerHTML = '&times;';
+  deleteBtn.title = 'Delete filter';
+  deleteBtn.addEventListener('click', () => deleteFilter(filter.id));
+  header.appendChild(deleteBtn);
+  
+  card.appendChild(header);
+  
+  // Body row: Regex input
+  const body = document.createElement('div');
+  body.className = 'filter-card-body';
+  
+  // Regex input
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'filter-value-input';
+  input.placeholder = 'Enter regex pattern (e.g., ^studio.*, keyword|other)';
+  input.value = filter.value || '';
+  
+  // Validate regex on input
+  input.addEventListener('input', () => {
+    const isValid = validateRegex(input.value);
+    input.classList.remove('valid', 'invalid');
+    if (input.value.trim()) {
+      input.classList.add(isValid ? 'valid' : 'invalid');
+    }
+  });
+  
+  // Save on blur or enter
+  input.addEventListener('blur', () => {
+    if (input.value !== filter.value) {
+      updateFilter(filter.id, { value: input.value });
+    }
+  });
+  input.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      input.blur();
+    }
+  });
+  
+  body.appendChild(input);
+  
+  // Regex indicator
+  const regexIndicator = document.createElement('span');
+  regexIndicator.className = 'regex-indicator';
+  regexIndicator.textContent = '/.../';
+  regexIndicator.title = 'Regex pattern';
+  body.appendChild(regexIndicator);
+  
+  card.appendChild(body);
+  
+  return card;
+}
+
+function validateRegex(pattern) {
+  if (!pattern || pattern.trim() === '') return true;
+  try {
+    new RegExp(pattern, 'i');
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function initFilterEventListeners() {
-  // Category header toggle
-  document.querySelectorAll('.filter-category-header').forEach(header => {
-    header.addEventListener('click', () => {
-      const categoryEl = header.closest('.filter-category');
-      const category = categoryEl.dataset.category;
-      categoryEl.classList.toggle('expanded');
-      
-      if (categoryEl.classList.contains('expanded')) {
-        expandedFilterCategories.add(category);
-      } else {
-        expandedFilterCategories.delete(category);
-      }
-    });
-  });
-  
-  // Mode and logic select changes
-  document.querySelectorAll('.filter-control select').forEach(select => {
-    select.addEventListener('change', async () => {
-      const category = select.dataset.category;
-      const setting = select.dataset.setting;
-      const value = select.value;
-      
-      try {
-        const config = {};
-        config[setting] = value;
-        
-        await browser.runtime.sendMessage({
-          action: 'updateFilterCategory',
-          category,
-          config
-        });
-      } catch (error) {
-        console.error('[Popup] Error updating filter setting:', error);
-      }
-    });
-  });
-  
-  // Add filter buttons
-  document.querySelectorAll('.filter-add-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const category = btn.dataset.category;
-      const input = document.querySelector(`.filter-add-row input[data-category="${category}"]`);
-      const value = input?.value?.trim();
-      
-      if (value) {
-        addFilterValue(category, value);
-        input.value = '';
-      }
-    });
-  });
-  
-  // Enter key on filter inputs
-  document.querySelectorAll('.filter-add-row input').forEach(input => {
-    input.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        const category = input.dataset.category;
-        const value = input.value.trim();
-        
-        if (value) {
-          addFilterValue(category, value);
-          input.value = '';
-        }
-      }
-    });
-  });
+  // Add filter button
+  addFilterBtn.addEventListener('click', addNewFilter);
   
   // Reset filters button
   resetFiltersBtn.addEventListener('click', async () => {
-    if (confirm('Reset all filters to defaults?')) {
+    if (filters.length === 0) return;
+    
+    if (confirm('Delete all filters?')) {
       try {
         const response = await browser.runtime.sendMessage({ action: 'resetFilters' });
-        if (response?.filters) {
-          filters = response.filters;
+        if (response?.success) {
+          filters = response.filters || [];
           renderFilters();
         }
       } catch (error) {
@@ -542,36 +634,72 @@ function initFilterEventListeners() {
   });
 }
 
-async function addFilterValue(category, value) {
+async function addNewFilter() {
   try {
-    const response = await browser.runtime.sendMessage({
-      action: 'addFilterValue',
-      category,
-      value
-    });
-    
-    if (response?.filters) {
+    const response = await browser.runtime.sendMessage({ action: 'addFilter' });
+    if (response?.success && response.filters) {
       filters = response.filters;
       renderFilters();
+      
+      // Focus the new filter's input
+      const newCard = filterList.querySelector(`[data-filter-id="${response.newFilter.id}"]`);
+      if (newCard) {
+        const input = newCard.querySelector('.filter-value-input');
+        if (input) {
+          setTimeout(() => input.focus(), 50);
+        }
+      }
     }
   } catch (error) {
-    console.error('[Popup] Error adding filter value:', error);
+    console.error('[Popup] Error adding filter:', error);
   }
 }
 
-async function removeFilterValue(category, value) {
+async function updateFilter(filterId, updates) {
   try {
     const response = await browser.runtime.sendMessage({
-      action: 'removeFilterValue',
-      category,
-      value
+      action: 'updateFilter',
+      filterId,
+      updates
     });
     
-    if (response?.filters) {
+    if (response?.success && response.filters) {
       filters = response.filters;
       renderFilters();
     }
   } catch (error) {
-    console.error('[Popup] Error removing filter value:', error);
+    console.error('[Popup] Error updating filter:', error);
+  }
+}
+
+async function toggleFilter(filterId) {
+  try {
+    const response = await browser.runtime.sendMessage({
+      action: 'toggleFilter',
+      filterId
+    });
+    
+    if (response?.success && response.filters) {
+      filters = response.filters;
+      renderFilters();
+    }
+  } catch (error) {
+    console.error('[Popup] Error toggling filter:', error);
+  }
+}
+
+async function deleteFilter(filterId) {
+  try {
+    const response = await browser.runtime.sendMessage({
+      action: 'deleteFilter',
+      filterId
+    });
+    
+    if (response?.success && response.filters) {
+      filters = response.filters;
+      renderFilters();
+    }
+  } catch (error) {
+    console.error('[Popup] Error deleting filter:', error);
   }
 }

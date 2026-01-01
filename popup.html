@@ -230,6 +230,30 @@
     .batch-stat.error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
     .batch-stat.pending { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
     .batch-stat.filtered { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+    .batch-stat.cancelled { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+    .batch-stat.removed { background: rgba(107, 114, 128, 0.2); color: #6b7280; }
+
+    .batch-cancel {
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 4px;
+      color: #ef4444;
+      font-size: 0.7rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-left: 8px;
+    }
+
+    .batch-cancel:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    .batch-cancel:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
 
     .batch-scenes {
       max-height: 0;
@@ -326,6 +350,23 @@
       color: #a855f7;
     }
 
+    .status-badge.cancelled {
+      background: rgba(107, 114, 128, 0.2);
+      color: #9ca3af;
+    }
+
+    .status-badge.removing {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+      animation: pulse 1.5s infinite;
+    }
+
+    .status-badge.removed {
+      background: rgba(107, 114, 128, 0.2);
+      color: #6b7280;
+      text-decoration: line-through;
+    }
+
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.6; }
@@ -347,6 +388,26 @@
     }
 
     .scene-retry:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .scene-undo {
+      background: transparent;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #f59e0b;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .scene-undo:hover {
+      background: rgba(245, 158, 11, 0.2);
+    }
+
+    .scene-undo:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
@@ -401,139 +462,31 @@
       cursor: help;
     }
 
-    /* Filter Styles */
+    /* Filter Styles - Individual Filter Cards */
     .filters-content {
       padding: 12px;
       overflow-y: auto;
       flex: 1;
     }
 
-    .filter-category {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      margin-bottom: 12px;
-      overflow: hidden;
-    }
-
-    .filter-category-header {
+    .filters-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 12px;
-      background: rgba(0, 0, 0, 0.2);
-      cursor: pointer;
+      margin-bottom: 12px;
     }
 
-    .filter-category-header:hover {
-      background: rgba(0, 0, 0, 0.3);
-    }
-
-    .filter-category-title {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #ccd6f6;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .filter-count {
-      font-size: 0.7rem;
-      padding: 2px 6px;
-      background: rgba(233, 69, 96, 0.2);
-      color: #e94560;
-      border-radius: 10px;
-    }
-
-    .filter-category-body {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.3s ease;
-    }
-
-    .filter-category.expanded .filter-category-body {
-      max-height: 400px;
-    }
-
-    .filter-category-header .chevron {
-      transition: transform 0.3s ease;
-      color: #64748b;
-    }
-
-    .filter-category.expanded .filter-category-header .chevron {
-      transform: rotate(180deg);
-    }
-
-    .filter-controls {
-      padding: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      display: flex;
-      gap: 12px;
-    }
-
-    .filter-control {
-      flex: 1;
-    }
-
-    .filter-control-label {
-      font-size: 0.65rem;
+    .filters-title {
+      font-size: 0.75rem;
       color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 6px;
     }
 
-    .filter-control select {
-      width: 100%;
-      padding: 6px 10px;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
-      color: #e8e8e8;
-      font-size: 0.8rem;
-      cursor: pointer;
-    }
-
-    .filter-control select:focus {
-      outline: none;
-      border-color: #e94560;
-    }
-
-    .filter-control select option {
-      background: #1a1a2e;
-    }
-
-    .filter-values {
-      padding: 12px;
-    }
-
-    .filter-add-row {
+    .add-filter-btn {
       display: flex;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .filter-add-row input {
-      flex: 1;
-      padding: 8px 10px;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
-      color: #e8e8e8;
-      font-size: 0.8rem;
-    }
-
-    .filter-add-row input::placeholder {
-      color: #5a6a8a;
-    }
-
-    .filter-add-row input:focus {
-      outline: none;
-      border-color: #e94560;
-    }
-
-    .filter-add-btn {
+      align-items: center;
+      gap: 6px;
       padding: 8px 14px;
       background: linear-gradient(135deg, #e94560 0%, #c23a52 100%);
       border: none;
@@ -545,50 +498,194 @@
       transition: all 0.2s ease;
     }
 
-    .filter-add-btn:hover {
+    .add-filter-btn:hover {
       transform: translateY(-1px);
       box-shadow: 0 2px 8px rgba(233, 69, 96, 0.3);
     }
 
-    .filter-chips {
+    .filter-list {
       display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
+      flex-direction: column;
+      gap: 10px;
     }
 
-    .filter-chip {
-      display: inline-flex;
+    .filter-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .filter-card.disabled {
+      opacity: 0.5;
+    }
+
+    .filter-card-header {
+      display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      background: rgba(233, 69, 96, 0.15);
-      border: 1px solid rgba(233, 69, 96, 0.3);
-      border-radius: 20px;
-      font-size: 0.75rem;
-      color: #e94560;
+      gap: 10px;
+      margin-bottom: 10px;
     }
 
-    .filter-chip-remove {
-      background: none;
-      border: none;
-      color: #e94560;
+    .filter-toggle {
+      position: relative;
+      width: 32px;
+      height: 18px;
       cursor: pointer;
-      padding: 0;
-      line-height: 1;
-      font-size: 1rem;
-      opacity: 0.7;
-      transition: opacity 0.2s ease;
+      flex-shrink: 0;
     }
 
-    .filter-chip-remove:hover {
-      opacity: 1;
+    .filter-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .filter-toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 9px;
+      transition: all 0.2s ease;
+    }
+
+    .filter-toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      left: 3px;
+      bottom: 3px;
+      background: #64748b;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    }
+
+    .filter-toggle input:checked + .filter-toggle-slider {
+      background: rgba(16, 185, 129, 0.3);
+    }
+
+    .filter-toggle input:checked + .filter-toggle-slider::before {
+      transform: translateX(14px);
+      background: #10b981;
+    }
+
+    .filter-type-select {
+      flex: 1;
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #e8e8e8;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .filter-type-select:focus {
+      outline: none;
+      border-color: #e94560;
+    }
+
+    .filter-type-select option {
+      background: #1a1a2e;
+    }
+
+    .filter-mode-btn {
+      padding: 6px 10px;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      color: #ef4444;
+      font-size: 0.7rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+    }
+
+    .filter-mode-btn.allowlist {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #10b981;
+    }
+
+    .filter-mode-btn:hover {
+      opacity: 0.8;
+    }
+
+    .filter-delete-btn {
+      padding: 6px 8px;
+      background: transparent;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      color: #ef4444;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+
+    .filter-delete-btn:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    .filter-card-body {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .filter-value-input {
+      flex: 1;
+      padding: 8px 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #e8e8e8;
+      font-size: 0.8rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    .filter-value-input::placeholder {
+      color: #5a6a8a;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .filter-value-input:focus {
+      outline: none;
+      border-color: #e94560;
+    }
+
+    .filter-value-input.invalid {
+      border-color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .filter-value-input.valid {
+      border-color: #10b981;
+    }
+
+    .regex-indicator {
+      font-size: 0.65rem;
+      color: #64748b;
+      padding: 4px 6px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+      font-family: monospace;
     }
 
     .filter-empty {
       color: #64748b;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       text-align: center;
-      padding: 10px;
+      padding: 40px 20px;
+    }
+
+    .filter-empty-icon {
+      font-size: 2rem;
+      margin-bottom: 8px;
+      opacity: 0.5;
     }
 
     .filters-footer {
@@ -678,161 +775,25 @@
   <!-- Filters Tab -->
   <div class="tab-content" id="filtersTab">
     <div class="filters-content" id="filtersContent">
-      <!-- Studios Filter -->
-      <div class="filter-category" data-category="studios">
-        <div class="filter-category-header">
-          <div class="filter-category-title">
-            Studios
-            <span class="filter-count" data-count="studios">0</span>
-          </div>
-          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </div>
-        <div class="filter-category-body">
-          <div class="filter-controls">
-            <div class="filter-control">
-              <div class="filter-control-label">Mode</div>
-              <select data-category="studios" data-setting="mode">
-                <option value="blocklist">Blocklist</option>
-                <option value="allowlist">Allowlist</option>
-              </select>
-            </div>
-            <div class="filter-control">
-              <div class="filter-control-label">Match Logic</div>
-              <select data-category="studios" data-setting="matchLogic">
-                <option value="or">Any (OR)</option>
-                <option value="and">All (AND)</option>
-              </select>
-            </div>
-          </div>
-          <div class="filter-values">
-            <div class="filter-add-row">
-              <input type="text" placeholder="Add studio name..." data-category="studios">
-              <button class="filter-add-btn" data-category="studios">Add</button>
-            </div>
-            <div class="filter-chips" data-category="studios"></div>
-          </div>
-        </div>
+      <div class="filters-header">
+        <span class="filters-title">Filter Rules</span>
+        <button class="add-filter-btn" id="addFilterBtn">
+          <span>+</span> Add Filter
+        </button>
       </div>
 
-      <!-- Performers Filter -->
-      <div class="filter-category" data-category="performers">
-        <div class="filter-category-header">
-          <div class="filter-category-title">
-            Performers
-            <span class="filter-count" data-count="performers">0</span>
-          </div>
-          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </div>
-        <div class="filter-category-body">
-          <div class="filter-controls">
-            <div class="filter-control">
-              <div class="filter-control-label">Mode</div>
-              <select data-category="performers" data-setting="mode">
-                <option value="blocklist">Blocklist</option>
-                <option value="allowlist">Allowlist</option>
-              </select>
-            </div>
-            <div class="filter-control">
-              <div class="filter-control-label">Match Logic</div>
-              <select data-category="performers" data-setting="matchLogic">
-                <option value="or">Any (OR)</option>
-                <option value="and">All (AND)</option>
-              </select>
-            </div>
-          </div>
-          <div class="filter-values">
-            <div class="filter-add-row">
-              <input type="text" placeholder="Add performer name..." data-category="performers">
-              <button class="filter-add-btn" data-category="performers">Add</button>
-            </div>
-            <div class="filter-chips" data-category="performers"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Names Filter -->
-      <div class="filter-category" data-category="names">
-        <div class="filter-category-header">
-          <div class="filter-category-title">
-            Scene Names
-            <span class="filter-count" data-count="names">0</span>
-          </div>
-          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </div>
-        <div class="filter-category-body">
-          <div class="filter-controls">
-            <div class="filter-control">
-              <div class="filter-control-label">Mode</div>
-              <select data-category="names" data-setting="mode">
-                <option value="blocklist">Blocklist</option>
-                <option value="allowlist">Allowlist</option>
-              </select>
-            </div>
-            <div class="filter-control">
-              <div class="filter-control-label">Match Logic</div>
-              <select data-category="names" data-setting="matchLogic">
-                <option value="or">Any (OR)</option>
-                <option value="and">All (AND)</option>
-              </select>
-            </div>
-          </div>
-          <div class="filter-values">
-            <div class="filter-add-row">
-              <input type="text" placeholder="Add keyword..." data-category="names">
-              <button class="filter-add-btn" data-category="names">Add</button>
-            </div>
-            <div class="filter-chips" data-category="names"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tags Filter -->
-      <div class="filter-category" data-category="tags">
-        <div class="filter-category-header">
-          <div class="filter-category-title">
-            Tags
-            <span class="filter-count" data-count="tags">0</span>
-          </div>
-          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </div>
-        <div class="filter-category-body">
-          <div class="filter-controls">
-            <div class="filter-control">
-              <div class="filter-control-label">Mode</div>
-              <select data-category="tags" data-setting="mode">
-                <option value="blocklist">Blocklist</option>
-                <option value="allowlist">Allowlist</option>
-              </select>
-            </div>
-            <div class="filter-control">
-              <div class="filter-control-label">Match Logic</div>
-              <select data-category="tags" data-setting="matchLogic">
-                <option value="or">Any (OR)</option>
-                <option value="and">All (AND)</option>
-              </select>
-            </div>
-          </div>
-          <div class="filter-values">
-            <div class="filter-add-row">
-              <input type="text" placeholder="Add tag..." data-category="tags">
-              <button class="filter-add-btn" data-category="tags">Add</button>
-            </div>
-            <div class="filter-chips" data-category="tags"></div>
-          </div>
+      <div class="filter-list" id="filterList">
+        <!-- Filter cards will be rendered here dynamically -->
+        <div class="filter-empty" id="filterEmpty">
+          <div class="filter-empty-icon">&#9881;</div>
+          <div>No filters configured</div>
+          <div style="font-size: 0.75rem; margin-top: 4px;">Click "Add Filter" to create one</div>
         </div>
       </div>
     </div>
 
     <div class="filters-footer">
-      <button class="btn-reset-filters" id="resetFiltersBtn">Reset All Filters</button>
+      <button class="btn-reset-filters" id="resetFiltersBtn">Clear All Filters</button>
     </div>
   </div>
 
