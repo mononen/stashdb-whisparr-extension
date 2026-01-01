@@ -135,6 +135,23 @@ function extractMetadataFromClickedElement(element, targetStashId) {
       metadata.performers = extractPerformers(container);
       metadata.tags = extractTags(container);
     }
+    
+    // If studio still not found, try broader search from the clicked element
+    if (!metadata.studio) {
+      let searchEl = element;
+      for (let i = 0; i < 8 && searchEl && searchEl !== document.body; i++) {
+        const studioLink = searchEl.querySelector('a[href*="/studios/"]');
+        if (studioLink) {
+          const text = studioLink.textContent?.trim();
+          if (text && text.length > 0) {
+            metadata.studio = text;
+            console.log("[StashDB-Whisparr] Found studio via broader search:", text);
+            break;
+          }
+        }
+        searchEl = searchEl.parentElement;
+      }
+    }
   }
   
   return metadata;
@@ -219,29 +236,71 @@ function extractAllScenesWithMetadata() {
  */
 function findSceneContainer(link) {
   let current = link;
+  let bestContainer = null;
   
   // Walk up to find a card-like container
   // StashDB typically uses Bootstrap-like card classes or specific scene card components
   while (current && current !== document.body) {
     // Check for common card/container patterns
     const classes = current.className || '';
+    
+    // Check if this container has a studio link (key indicator of a full scene card)
+    const hasStudioLink = current.querySelectorAll('a[href*="/studios/"]').length > 0;
+    const hasSceneLink = current.querySelectorAll('a[href*="/scenes/"]').length > 0;
+    const hasPerformerLink = current.querySelectorAll('a[href*="/performers/"]').length > 0;
+    
+    // If container has studio link, it's likely the full card
+    if (hasStudioLink && hasSceneLink) {
+      return current;
+    }
+    
+    // Check for class-based patterns
     if (
       classes.includes('card') ||
       classes.includes('scene') ||
       classes.includes('SceneCard') ||
       classes.includes('row') ||
-      current.getAttribute('data-scene') ||
-      // Check if this element contains multiple distinct sections (title, performers, etc.)
-      (current.querySelectorAll('a[href*="/performers/"]').length > 0 && 
-       current.querySelectorAll('a[href*="/scenes/"]').length > 0)
+      current.getAttribute('data-scene')
     ) {
-      return current;
+      // If it has a studio link, return immediately
+      if (hasStudioLink) {
+        return current;
+      }
+      // Otherwise save as best candidate and keep looking up
+      if (!bestContainer) {
+        bestContainer = current;
+      }
     }
+    
+    // Also check if this element contains multiple links (scene + performer or studio)
+    if ((hasPerformerLink || hasStudioLink) && hasSceneLink) {
+      if (!bestContainer) {
+        bestContainer = current;
+      }
+    }
+    
     current = current.parentElement;
   }
   
-  // Fallback: return the parent of the link
-  return link.parentElement?.parentElement || link.parentElement || link;
+  // Return best container found, or walk up a few levels from the link
+  if (bestContainer) {
+    return bestContainer;
+  }
+  
+  // Fallback: walk up 4-5 levels to find a reasonable container
+  current = link;
+  for (let i = 0; i < 5 && current && current !== document.body; i++) {
+    current = current.parentElement;
+    if (current && current.querySelectorAll('a[href*="/studios/"]').length > 0) {
+      return current;
+    }
+  }
+  
+  // Last resort: return grandparent or parent
+  return link.parentElement?.parentElement?.parentElement || 
+         link.parentElement?.parentElement || 
+         link.parentElement || 
+         link;
 }
 
 /**
@@ -345,13 +404,28 @@ function extractTitle(container, sceneLink) {
  * Extract studio name from container
  */
 function extractStudio(container) {
-  // Look for links to /studios/
+  // Look for links to /studios/ within the container
   const studioLinks = container.querySelectorAll('a[href*="/studios/"]');
   for (const link of studioLinks) {
     const text = link.textContent?.trim();
     if (text && text.length > 0) {
+      console.log("[StashDB-Whisparr] Found studio in container:", text);
       return text;
     }
+  }
+  
+  // If not found, try looking in parent elements (up to 5 levels)
+  let current = container.parentElement;
+  for (let i = 0; i < 5 && current && current !== document.body; i++) {
+    const parentStudioLinks = current.querySelectorAll('a[href*="/studios/"]');
+    for (const link of parentStudioLinks) {
+      const text = link.textContent?.trim();
+      if (text && text.length > 0) {
+        console.log("[StashDB-Whisparr] Found studio in parent:", text);
+        return text;
+      }
+    }
+    current = current.parentElement;
   }
   
   // Try to find studio by class patterns
@@ -366,11 +440,13 @@ function extractStudio(container) {
     if (studioEl) {
       const text = studioEl.textContent?.trim();
       if (text && text.length > 0) {
+        console.log("[StashDB-Whisparr] Found studio by class:", text);
         return text;
       }
     }
   }
   
+  console.log("[StashDB-Whisparr] Could not extract studio");
   return '';
 }
 
@@ -542,3 +618,4 @@ function extractCurrentSceneMetadata() {
   console.log("[StashDB-Whisparr] Extracted current scene metadata:", metadata);
   return metadata;
 }
+

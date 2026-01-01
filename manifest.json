@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "StashDB to Whisparr",
-  "version": "1.1",
+  "version": "1.2",
   "description": "Add scenes from StashDB to your Whisparr server with a right-click",
   "permissions": [
     "contextMenus",
