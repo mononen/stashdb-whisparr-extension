@@ -61,6 +61,222 @@ function updateSceneStatus(batchId, stashId, updates) {
 loadBatches();
 
 // ============================================
+// Filter State Management
+// ============================================
+
+// Default filter configuration
+const defaultFilters = {
+  studios: {
+    mode: 'blocklist',
+    matchLogic: 'or',
+    values: []
+  },
+  performers: {
+    mode: 'blocklist',
+    matchLogic: 'or',
+    values: []
+  },
+  names: {
+    mode: 'blocklist',
+    matchLogic: 'or',
+    values: []
+  },
+  tags: {
+    mode: 'blocklist',
+    matchLogic: 'or',
+    values: []
+  }
+};
+
+// In-memory cache of filters
+let filtersCache = JSON.parse(JSON.stringify(defaultFilters));
+
+// Load filters from storage on startup
+async function loadFilters() {
+  const data = await browser.storage.local.get({ filters: defaultFilters });
+  filtersCache = { ...defaultFilters, ...data.filters };
+  // Ensure all categories exist with defaults
+  for (const key of Object.keys(defaultFilters)) {
+    if (!filtersCache[key]) {
+      filtersCache[key] = { ...defaultFilters[key] };
+    }
+  }
+  return filtersCache;
+}
+
+// Save filters to storage and broadcast update
+async function saveFilters() {
+  await browser.storage.local.set({ filters: filtersCache });
+  broadcastFilterUpdate();
+}
+
+// Broadcast filter update to popup
+function broadcastFilterUpdate() {
+  browser.runtime.sendMessage({
+    action: 'filterUpdate',
+    filters: filtersCache
+  }).catch(() => {
+    // Popup might not be open, ignore error
+  });
+}
+
+// Load filters on extension load
+loadFilters();
+
+// ============================================
+// Filter Evaluation Logic
+// ============================================
+
+/**
+ * Normalize metadata from either scraped StashDB data or Whisparr lookup data
+ * @param {Object} sceneData - Scene data (from scraping or Whisparr lookup)
+ * @returns {Object} Normalized metadata { studio, performers, tags, title }
+ */
+function normalizeSceneMetadata(sceneData) {
+  // Handle scraped metadata format (from content script)
+  if (sceneData.stashId && (sceneData.studio !== undefined || sceneData.performers !== undefined)) {
+    return {
+      studio: sceneData.studio || '',
+      performers: sceneData.performers || [],
+      tags: sceneData.tags || [],
+      title: sceneData.title || ''
+    };
+  }
+  
+  // Handle Whisparr lookup format (fallback)
+  const studio = sceneData.studio?.title || sceneData.studioTitle || '';
+  const performers = (sceneData.credits || [])
+    .filter(c => c.creditType === 'Actor' || c.type === 'Actor')
+    .map(c => c.name || c.personName || '')
+    .filter(Boolean);
+  const tags = sceneData.genres || [];
+  const title = sceneData.title || '';
+  
+  return { studio, performers, tags, title };
+}
+
+/**
+ * Check if a value matches any item in the scene's metadata for a category
+ * @param {string} filterValue - The filter value to check
+ * @param {Array|string} sceneValues - The scene's values for this category
+ * @param {boolean} isPartialMatch - Whether to use partial matching (for names)
+ * @returns {boolean}
+ */
+function valueMatches(filterValue, sceneValues, isPartialMatch = false) {
+  const normalizedFilter = filterValue.toLowerCase().trim();
+  
+  if (Array.isArray(sceneValues)) {
+    return sceneValues.some(sv => {
+      const normalizedScene = (sv || '').toLowerCase().trim();
+      return isPartialMatch 
+        ? normalizedScene.includes(normalizedFilter) || normalizedFilter.includes(normalizedScene)
+        : normalizedScene === normalizedFilter;
+    });
+  } else {
+    const normalizedScene = (sceneValues || '').toLowerCase().trim();
+    return isPartialMatch
+      ? normalizedScene.includes(normalizedFilter) || normalizedFilter.includes(normalizedScene)
+      : normalizedScene === normalizedFilter;
+  }
+}
+
+/**
+ * Evaluate a single filter category against scene metadata
+ * @param {Object} filterConfig - The filter configuration for this category
+ * @param {Array|string} sceneValues - The scene's values for this category
+ * @param {boolean} isPartialMatch - Whether to use partial matching
+ * @returns {Object} { pass: boolean, reason: string|null }
+ */
+function evaluateCategory(filterConfig, sceneValues, isPartialMatch = false) {
+  const { mode, matchLogic, values } = filterConfig;
+  
+  // If no filter values configured, always pass
+  if (!values || values.length === 0) {
+    return { pass: true, reason: null };
+  }
+  
+  // Count how many filter values match the scene
+  const matches = values.filter(v => valueMatches(v, sceneValues, isPartialMatch));
+  const allMatch = matches.length === values.length;
+  const anyMatch = matches.length > 0;
+  
+  if (mode === 'blocklist') {
+    // Blocklist: FAIL if matches occur according to matchLogic
+    if (matchLogic === 'and') {
+      // FAIL only if ALL filter values match
+      if (allMatch) {
+        return { pass: false, reason: `Blocked: all of [${values.join(', ')}]` };
+      }
+    } else {
+      // matchLogic === 'or': FAIL if ANY filter value matches
+      if (anyMatch) {
+        return { pass: false, reason: `Blocked: ${matches.join(', ')}` };
+      }
+    }
+    return { pass: true, reason: null };
+  } else {
+    // Allowlist: PASS only if matches occur according to matchLogic
+    if (matchLogic === 'and') {
+      // PASS only if ALL filter values match
+      if (!allMatch) {
+        const missing = values.filter(v => !matches.includes(v));
+        return { pass: false, reason: `Missing required: ${missing.join(', ')}` };
+      }
+    } else {
+      // matchLogic === 'or': PASS if ANY filter value matches
+      if (!anyMatch) {
+        return { pass: false, reason: `None of [${values.join(', ')}] found` };
+      }
+    }
+    return { pass: true, reason: null };
+  }
+}
+
+/**
+ * Check if a scene should be added based on all filters
+ * @param {Object} sceneData - Scene data (scraped metadata or Whisparr lookup)
+ * @returns {Object} { shouldAdd: boolean, reason: string|null, category: string|null }
+ */
+function shouldAddScene(sceneData) {
+  const metadata = normalizeSceneMetadata(sceneData);
+  
+  console.log("[StashDB-Whisparr] Evaluating filters for scene:", metadata.title || sceneData.stashId);
+  console.log("[StashDB-Whisparr] Scene metadata:", metadata);
+  console.log("[StashDB-Whisparr] Active filters:", filtersCache);
+  
+  // Check studios filter
+  const studioResult = evaluateCategory(filtersCache.studios, metadata.studio, false);
+  if (!studioResult.pass) {
+    console.log("[StashDB-Whisparr] Scene filtered by studio:", studioResult.reason);
+    return { shouldAdd: false, reason: studioResult.reason, category: 'studios' };
+  }
+  
+  // Check performers filter
+  const performerResult = evaluateCategory(filtersCache.performers, metadata.performers, false);
+  if (!performerResult.pass) {
+    console.log("[StashDB-Whisparr] Scene filtered by performer:", performerResult.reason);
+    return { shouldAdd: false, reason: performerResult.reason, category: 'performers' };
+  }
+  
+  // Check names filter (partial match for scene title)
+  const nameResult = evaluateCategory(filtersCache.names, metadata.title, true);
+  if (!nameResult.pass) {
+    console.log("[StashDB-Whisparr] Scene filtered by name:", nameResult.reason);
+    return { shouldAdd: false, reason: nameResult.reason, category: 'names' };
+  }
+  
+  // Check tags filter
+  const tagResult = evaluateCategory(filtersCache.tags, metadata.tags, false);
+  if (!tagResult.pass) {
+    console.log("[StashDB-Whisparr] Scene filtered by tag:", tagResult.reason);
+    return { shouldAdd: false, reason: tagResult.reason, category: 'tags' };
+  }
+  
+  console.log("[StashDB-Whisparr] Scene passed all filters");
+  return { shouldAdd: true, reason: null, category: null };
+}
+
+// ============================================
 // Context Menu Setup
 // ============================================
 
@@ -88,7 +304,10 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
         const stashId = extractStashId(info.linkUrl);
         if (stashId) {
           console.log("[StashDB-Whisparr] Adding scene from clicked link:", stashId);
-          await addSingleScene(stashId);
+          // Get metadata from page for this scene (try to find in scene list)
+          const metadataResponse = await browser.tabs.sendMessage(tab.id, { action: "getAllScenesWithMetadata" });
+          const sceneMetadata = metadataResponse?.scenes?.find(s => s.stashId === stashId) || { stashId };
+          await addSingleSceneWithMetadata(stashId, sceneMetadata, tab.id);
           return;
         }
       }
@@ -98,33 +317,35 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
         const stashId = extractStashId(tab.url);
         if (stashId) {
           console.log("[StashDB-Whisparr] Adding scene from page URL:", stashId);
-          await addSingleScene(stashId);
+          // Get metadata from the current scene detail page
+          const metadataResponse = await browser.tabs.sendMessage(tab.id, { action: "getCurrentSceneMetadata" });
+          const sceneMetadata = metadataResponse?.metadata || { stashId };
+          await addSingleSceneWithMetadata(stashId, sceneMetadata, tab.id);
           return;
         }
       }
       
-      // Case 3: On another page (performers, studios, tags, etc.) - get all scene links
-      console.log("[StashDB-Whisparr] Querying content script for all scene links...");
-      const response = await browser.tabs.sendMessage(tab.id, { action: "getAllSceneUrls" });
+      // Case 3: On another page (performers, studios, tags, etc.) - get all scenes with metadata
+      console.log("[StashDB-Whisparr] Querying content script for all scenes with metadata...");
+      const response = await browser.tabs.sendMessage(tab.id, { action: "getAllScenesWithMetadata" });
       
-      if (!response || !response.sceneUrls || response.sceneUrls.length === 0) {
+      if (!response || !response.scenes || response.scenes.length === 0) {
         showNotification("No Scenes", "No scene links found on this page");
         return;
       }
       
-      const sceneUrls = response.sceneUrls;
-      console.log("[StashDB-Whisparr] Found", sceneUrls.length, "scene links");
+      const scenes = response.scenes;
+      console.log("[StashDB-Whisparr] Found", scenes.length, "scenes with metadata");
       
       // Show confirmation popup
-      const confirmed = await showConfirmationPopup(sceneUrls.length, tab.id);
+      const confirmed = await showConfirmationPopup(scenes.length, tab.id);
       if (!confirmed) {
         console.log("[StashDB-Whisparr] User cancelled bulk add");
         return;
       }
       
-      // Extract stash IDs and add all scenes
-      const stashIds = sceneUrls.map(url => extractStashId(url)).filter(Boolean);
-      await addMultipleScenes(stashIds);
+      // Add all scenes with their metadata (filtering happens before API calls)
+      await addMultipleScenesWithMetadata(scenes);
       
     } catch (error) {
       console.error("[StashDB-Whisparr] Error:", error);
@@ -133,17 +354,29 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-// Add a single scene to Whisparr (with batch tracking)
-async function addSingleScene(stashId) {
+// Add a single scene to Whisparr with pre-filtering (no Whisparr API call if filtered)
+async function addSingleSceneWithMetadata(stashId, metadata, tabId) {
   // Create a batch with single scene for tracking
   const batch = createBatch([stashId]);
   
-  // Update status to adding
-  updateSceneStatus(batch.id, stashId, { status: 'adding' });
+  // Get title from metadata for display
+  const scrapedTitle = metadata?.title || null;
+  
+  // PRE-FILTER: Check filters BEFORE any Whisparr API call
+  const filterResult = shouldAddScene(metadata);
+  if (!filterResult.shouldAdd) {
+    console.log("[StashDB-Whisparr] Scene pre-filtered (no API call):", filterResult.reason);
+    updateSceneStatus(batch.id, stashId, { status: 'filtered', title: scrapedTitle, error: filterResult.reason });
+    showNotification("Filtered", `Scene skipped: ${filterResult.reason}`);
+    return;
+  }
+  
+  // Update status to adding (scene passed filters)
+  updateSceneStatus(batch.id, stashId, { status: 'adding', title: scrapedTitle });
   
   try {
     const result = await addSceneToWhisparr(stashId);
-    const title = result?.title || result?.movie?.title || null;
+    const title = result?.title || result?.movie?.title || scrapedTitle;
     console.log("[StashDB-Whisparr] Result:", result);
     
     if (result && result.searched) {
@@ -159,42 +392,81 @@ async function addSingleScene(stashId) {
   } catch (error) {
     console.error("[StashDB-Whisparr] Error:", error);
     if (error.message.includes("already exists") || error.message.includes("File already exists")) {
-      updateSceneStatus(batch.id, stashId, { status: 'exists', title: error.sceneTitle || null, error: null });
+      updateSceneStatus(batch.id, stashId, { status: 'exists', title: error.sceneTitle || scrapedTitle, error: null });
       showNotification("Exists", `Scene already exists with file`);
     } else {
-      updateSceneStatus(batch.id, stashId, { status: 'error', title: error.sceneTitle || null, error: error.message });
+      updateSceneStatus(batch.id, stashId, { status: 'error', title: error.sceneTitle || scrapedTitle, error: error.message });
       showNotification("Error", error.message);
     }
   }
 }
 
-// Add multiple scenes with progress notifications and batch tracking
-async function addMultipleScenes(stashIds) {
-  const total = stashIds.length;
+// Add multiple scenes with pre-filtering (no Whisparr API calls for filtered scenes)
+async function addMultipleScenesWithMetadata(scenes) {
+  const total = scenes.length;
   let added = 0;
   let searched = 0;
   let failed = 0;
   let alreadyExists = 0;
+  let filtered = 0;
   
-  // Create batch for tracking
-  const batch = createBatch(stashIds);
+  // PRE-FILTER: Check all scenes BEFORE any Whisparr API calls
+  const scenesToProcess = [];
+  const filteredScenes = [];
+  
+  for (const scene of scenes) {
+    const filterResult = shouldAddScene(scene);
+    if (filterResult.shouldAdd) {
+      scenesToProcess.push(scene);
+    } else {
+      filteredScenes.push({ scene, reason: filterResult.reason });
+      filtered++;
+    }
+  }
+  
+  console.log(`[StashDB-Whisparr] Pre-filter: ${scenesToProcess.length} to process, ${filtered} filtered out`);
+  
+  // Create batch for tracking (all scenes, including filtered ones)
+  const allStashIds = scenes.map(s => s.stashId);
+  const batch = createBatch(allStashIds);
+  
+  // Immediately mark filtered scenes as filtered (no API call needed)
+  for (const { scene, reason } of filteredScenes) {
+    updateSceneStatus(batch.id, scene.stashId, { 
+      status: 'filtered', 
+      title: scene.title || null, 
+      error: reason 
+    });
+  }
+  
+  // Only process scenes that passed filters
+  const toProcessCount = scenesToProcess.length;
+  
+  if (toProcessCount === 0) {
+    // All scenes were filtered, show summary immediately
+    await showProgressNotification("whisparr-bulk-progress", "Complete", `${filtered} scenes filtered`);
+    console.log("[StashDB-Whisparr] Bulk add complete: all scenes filtered");
+    return;
+  }
   
   // Create initial progress notification
   const notificationId = "whisparr-bulk-progress";
-  await showProgressNotification(notificationId, "Adding Scenes", `Adding scene 1 of ${total}...`);
+  await showProgressNotification(notificationId, "Adding Scenes", `Adding scene 1 of ${toProcessCount}...`);
   
-  for (let i = 0; i < stashIds.length; i++) {
-    const stashId = stashIds[i];
+  for (let i = 0; i < scenesToProcess.length; i++) {
+    const scene = scenesToProcess[i];
+    const stashId = scene.stashId;
+    const scrapedTitle = scene.title || null;
     
     // Update scene status to 'adding'
-    updateSceneStatus(batch.id, stashId, { status: 'adding' });
+    updateSceneStatus(batch.id, stashId, { status: 'adding', title: scrapedTitle });
     
     // Update progress notification
-    await showProgressNotification(notificationId, "Adding Scenes", `Adding scene ${i + 1} of ${total}...`);
+    await showProgressNotification(notificationId, "Adding Scenes", `Adding scene ${i + 1} of ${toProcessCount}...`);
     
     try {
       const result = await addSceneToWhisparr(stashId);
-      const title = result?.title || result?.movie?.title || null;
+      const title = result?.title || result?.movie?.title || scrapedTitle;
       
       if (result && result.searched) {
         searched++;
@@ -210,15 +482,15 @@ async function addMultipleScenes(stashIds) {
       console.error(`[StashDB-Whisparr] Failed to add scene ${stashId}:`, error);
       if (error.message.includes("already exists") || error.message.includes("File already exists")) {
         alreadyExists++;
-        updateSceneStatus(batch.id, stashId, { status: 'exists', title: error.sceneTitle || null, error: null });
+        updateSceneStatus(batch.id, stashId, { status: 'exists', title: error.sceneTitle || scrapedTitle, error: null });
       } else {
         failed++;
-        updateSceneStatus(batch.id, stashId, { status: 'error', title: error.sceneTitle || null, error: error.message });
+        updateSceneStatus(batch.id, stashId, { status: 'error', title: error.sceneTitle || scrapedTitle, error: error.message });
       }
     }
     
     // Small delay to avoid overwhelming the server
-    if (i < stashIds.length - 1) {
+    if (i < scenesToProcess.length - 1) {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
@@ -228,6 +500,7 @@ async function addMultipleScenes(stashIds) {
   if (added > 0) parts.push(`${added} added`);
   if (searched > 0) parts.push(`${searched} search triggered`);
   if (alreadyExists > 0) parts.push(`${alreadyExists} already exist`);
+  if (filtered > 0) parts.push(`${filtered} filtered`);
   if (failed > 0) parts.push(`${failed} failed`);
   
   const summary = parts.length > 0 ? parts.join(", ") : "No changes";
@@ -357,6 +630,9 @@ async function addSceneToWhisparr(stashId) {
   const sceneData = lookupResult.movie || lookupResult;
   
   console.log("[StashDB-Whisparr] Scene data:", sceneData);
+  
+  // Note: Filtering now happens BEFORE this function is called (using scraped metadata)
+  // This avoids unnecessary Whisparr API calls for filtered scenes
   
   // Add required fields for the POST
   sceneData.monitored = settings.monitored;
@@ -553,6 +829,77 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     batchesCache = [];
     saveBatches();
     sendResponse({ success: true });
+    return true;
+  }
+  
+  // Filter-related message handlers
+  if (message.action === 'getFilters') {
+    sendResponse({ filters: filtersCache });
+    return true;
+  }
+  
+  if (message.action === 'updateFilters') {
+    filtersCache = { ...filtersCache, ...message.filters };
+    saveFilters().then(() => {
+      sendResponse({ success: true, filters: filtersCache });
+    }).catch(error => {
+      sendResponse({ success: false, error: error.message });
+    });
+    return true;
+  }
+  
+  if (message.action === 'updateFilterCategory') {
+    const { category, config } = message;
+    if (filtersCache[category]) {
+      filtersCache[category] = { ...filtersCache[category], ...config };
+      saveFilters().then(() => {
+        sendResponse({ success: true, filters: filtersCache });
+      }).catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+    } else {
+      sendResponse({ success: false, error: 'Invalid category' });
+    }
+    return true;
+  }
+  
+  if (message.action === 'addFilterValue') {
+    const { category, value } = message;
+    if (filtersCache[category] && !filtersCache[category].values.includes(value)) {
+      filtersCache[category].values.push(value);
+      saveFilters().then(() => {
+        sendResponse({ success: true, filters: filtersCache });
+      }).catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+    } else {
+      sendResponse({ success: true, filters: filtersCache });
+    }
+    return true;
+  }
+  
+  if (message.action === 'removeFilterValue') {
+    const { category, value } = message;
+    if (filtersCache[category]) {
+      filtersCache[category].values = filtersCache[category].values.filter(v => v !== value);
+      saveFilters().then(() => {
+        sendResponse({ success: true, filters: filtersCache });
+      }).catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+    } else {
+      sendResponse({ success: false, error: 'Invalid category' });
+    }
+    return true;
+  }
+  
+  if (message.action === 'resetFilters') {
+    filtersCache = JSON.parse(JSON.stringify(defaultFilters));
+    saveFilters().then(() => {
+      sendResponse({ success: true, filters: filtersCache });
+    }).catch(error => {
+      sendResponse({ success: false, error: error.message });
+    });
     return true;
   }
   

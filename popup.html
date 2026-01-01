@@ -101,6 +101,69 @@
       background: #e94560;
     }
 
+    /* Tab Navigation */
+    .tab-bar {
+      display: flex;
+      background: rgba(0, 0, 0, 0.15);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px 16px;
+      background: transparent;
+      border: none;
+      color: #8892b0;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .tab-btn:hover {
+      color: #ccd6f6;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .tab-btn.active {
+      color: #e94560;
+    }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #e94560, #ff6b6b);
+    }
+
+    .tab-btn .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      margin-left: 6px;
+      background: rgba(233, 69, 96, 0.2);
+      color: #e94560;
+      border-radius: 10px;
+      font-size: 0.65rem;
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+    }
+
     .content {
       flex: 1;
       overflow-y: auto;
@@ -166,6 +229,7 @@
     .batch-stat.success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
     .batch-stat.error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
     .batch-stat.pending { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+    .batch-stat.filtered { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
 
     .batch-scenes {
       max-height: 0;
@@ -255,6 +319,11 @@
     .status-badge.error {
       background: rgba(239, 68, 68, 0.2);
       color: #ef4444;
+    }
+
+    .status-badge.filtered {
+      background: rgba(168, 85, 247, 0.2);
+      color: #a855f7;
     }
 
     @keyframes pulse {
@@ -348,21 +417,239 @@
       margin-bottom: 4px;
     }
 
+    /* Filter Styles */
+    .filters-content {
+      padding: 12px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .filter-category {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .filter-category-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.2);
+      cursor: pointer;
+    }
+
+    .filter-category-header:hover {
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    .filter-category-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #ccd6f6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-count {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      background: rgba(233, 69, 96, 0.2);
+      color: #e94560;
+      border-radius: 10px;
+    }
+
+    .filter-category-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .filter-category.expanded .filter-category-body {
+      max-height: 400px;
+    }
+
+    .filter-category-header .chevron {
+      transition: transform 0.3s ease;
+      color: #64748b;
+    }
+
+    .filter-category.expanded .filter-category-header .chevron {
+      transform: rotate(180deg);
+    }
+
+    .filter-controls {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      gap: 12px;
+    }
+
+    .filter-control {
+      flex: 1;
+    }
+
+    .filter-control-label {
+      font-size: 0.65rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .filter-control select {
+      width: 100%;
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #e8e8e8;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .filter-control select:focus {
+      outline: none;
+      border-color: #e94560;
+    }
+
+    .filter-control select option {
+      background: #1a1a2e;
+    }
+
+    .filter-values {
+      padding: 12px;
+    }
+
+    .filter-add-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .filter-add-row input {
+      flex: 1;
+      padding: 8px 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #e8e8e8;
+      font-size: 0.8rem;
+    }
+
+    .filter-add-row input::placeholder {
+      color: #5a6a8a;
+    }
+
+    .filter-add-row input:focus {
+      outline: none;
+      border-color: #e94560;
+    }
+
+    .filter-add-btn {
+      padding: 8px 14px;
+      background: linear-gradient(135deg, #e94560 0%, #c23a52 100%);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .filter-add-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(233, 69, 96, 0.3);
+    }
+
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(233, 69, 96, 0.15);
+      border: 1px solid rgba(233, 69, 96, 0.3);
+      border-radius: 20px;
+      font-size: 0.75rem;
+      color: #e94560;
+    }
+
+    .filter-chip-remove {
+      background: none;
+      border: none;
+      color: #e94560;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      font-size: 1rem;
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+    }
+
+    .filter-chip-remove:hover {
+      opacity: 1;
+    }
+
+    .filter-empty {
+      color: #64748b;
+      font-size: 0.8rem;
+      text-align: center;
+      padding: 10px;
+    }
+
+    .filters-footer {
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-reset-filters {
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      border-radius: 6px;
+      color: #94a3b8;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-reset-filters:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #e8e8e8;
+    }
+
     /* Scrollbar styling */
-    .content::-webkit-scrollbar {
+    .content::-webkit-scrollbar,
+    .filters-content::-webkit-scrollbar {
       width: 6px;
     }
 
-    .content::-webkit-scrollbar-track {
+    .content::-webkit-scrollbar-track,
+    .filters-content::-webkit-scrollbar-track {
       background: rgba(0, 0, 0, 0.2);
     }
 
-    .content::-webkit-scrollbar-thumb {
+    .content::-webkit-scrollbar-thumb,
+    .filters-content::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.15);
       border-radius: 3px;
     }
 
-    .content::-webkit-scrollbar-thumb:hover {
+    .content::-webkit-scrollbar-thumb:hover,
+    .filters-content::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.25);
     }
   </style>
@@ -380,23 +667,191 @@
     </div>
   </header>
 
-  <div class="content" id="content">
-    <div class="empty-state" id="emptyState">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-      </svg>
-      <p>No batch operations yet</p>
-      <p style="font-size: 0.75rem; margin-top: 4px;">Right-click on StashDB to add scenes</p>
-    </div>
-    <div id="batchList"></div>
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="batches">Batches</button>
+    <button class="tab-btn" data-tab="filters">Filters <span class="badge" id="filterBadge" style="display: none;">0</span></button>
   </div>
 
-  <footer id="footer" style="display: none;">
-    <button class="btn-retry" id="retryAllBtn" disabled>Retry All Failed</button>
-    <button class="btn-clear" id="clearAllBtn">Clear All</button>
-  </footer>
+  <!-- Batches Tab -->
+  <div class="tab-content active" id="batchesTab">
+    <div class="content" id="content">
+      <div class="empty-state" id="emptyState">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+        <p>No batch operations yet</p>
+        <p style="font-size: 0.75rem; margin-top: 4px;">Right-click on StashDB to add scenes</p>
+      </div>
+      <div id="batchList"></div>
+    </div>
+
+    <footer id="footer" style="display: none;">
+      <button class="btn-retry" id="retryAllBtn" disabled>Retry All Failed</button>
+      <button class="btn-clear" id="clearAllBtn">Clear All</button>
+    </footer>
+  </div>
+
+  <!-- Filters Tab -->
+  <div class="tab-content" id="filtersTab">
+    <div class="filters-content" id="filtersContent">
+      <!-- Studios Filter -->
+      <div class="filter-category" data-category="studios">
+        <div class="filter-category-header">
+          <div class="filter-category-title">
+            Studios
+            <span class="filter-count" data-count="studios">0</span>
+          </div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="filter-category-body">
+          <div class="filter-controls">
+            <div class="filter-control">
+              <div class="filter-control-label">Mode</div>
+              <select data-category="studios" data-setting="mode">
+                <option value="blocklist">Blocklist</option>
+                <option value="allowlist">Allowlist</option>
+              </select>
+            </div>
+            <div class="filter-control">
+              <div class="filter-control-label">Match Logic</div>
+              <select data-category="studios" data-setting="matchLogic">
+                <option value="or">Any (OR)</option>
+                <option value="and">All (AND)</option>
+              </select>
+            </div>
+          </div>
+          <div class="filter-values">
+            <div class="filter-add-row">
+              <input type="text" placeholder="Add studio name..." data-category="studios">
+              <button class="filter-add-btn" data-category="studios">Add</button>
+            </div>
+            <div class="filter-chips" data-category="studios"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performers Filter -->
+      <div class="filter-category" data-category="performers">
+        <div class="filter-category-header">
+          <div class="filter-category-title">
+            Performers
+            <span class="filter-count" data-count="performers">0</span>
+          </div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="filter-category-body">
+          <div class="filter-controls">
+            <div class="filter-control">
+              <div class="filter-control-label">Mode</div>
+              <select data-category="performers" data-setting="mode">
+                <option value="blocklist">Blocklist</option>
+                <option value="allowlist">Allowlist</option>
+              </select>
+            </div>
+            <div class="filter-control">
+              <div class="filter-control-label">Match Logic</div>
+              <select data-category="performers" data-setting="matchLogic">
+                <option value="or">Any (OR)</option>
+                <option value="and">All (AND)</option>
+              </select>
+            </div>
+          </div>
+          <div class="filter-values">
+            <div class="filter-add-row">
+              <input type="text" placeholder="Add performer name..." data-category="performers">
+              <button class="filter-add-btn" data-category="performers">Add</button>
+            </div>
+            <div class="filter-chips" data-category="performers"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Names Filter -->
+      <div class="filter-category" data-category="names">
+        <div class="filter-category-header">
+          <div class="filter-category-title">
+            Scene Names
+            <span class="filter-count" data-count="names">0</span>
+          </div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="filter-category-body">
+          <div class="filter-controls">
+            <div class="filter-control">
+              <div class="filter-control-label">Mode</div>
+              <select data-category="names" data-setting="mode">
+                <option value="blocklist">Blocklist</option>
+                <option value="allowlist">Allowlist</option>
+              </select>
+            </div>
+            <div class="filter-control">
+              <div class="filter-control-label">Match Logic</div>
+              <select data-category="names" data-setting="matchLogic">
+                <option value="or">Any (OR)</option>
+                <option value="and">All (AND)</option>
+              </select>
+            </div>
+          </div>
+          <div class="filter-values">
+            <div class="filter-add-row">
+              <input type="text" placeholder="Add keyword..." data-category="names">
+              <button class="filter-add-btn" data-category="names">Add</button>
+            </div>
+            <div class="filter-chips" data-category="names"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tags Filter -->
+      <div class="filter-category" data-category="tags">
+        <div class="filter-category-header">
+          <div class="filter-category-title">
+            Tags
+            <span class="filter-count" data-count="tags">0</span>
+          </div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+        <div class="filter-category-body">
+          <div class="filter-controls">
+            <div class="filter-control">
+              <div class="filter-control-label">Mode</div>
+              <select data-category="tags" data-setting="mode">
+                <option value="blocklist">Blocklist</option>
+                <option value="allowlist">Allowlist</option>
+              </select>
+            </div>
+            <div class="filter-control">
+              <div class="filter-control-label">Match Logic</div>
+              <select data-category="tags" data-setting="matchLogic">
+                <option value="or">Any (OR)</option>
+                <option value="and">All (AND)</option>
+              </select>
+            </div>
+          </div>
+          <div class="filter-values">
+            <div class="filter-add-row">
+              <input type="text" placeholder="Add tag..." data-category="tags">
+              <button class="filter-add-btn" data-category="tags">Add</button>
+            </div>
+            <div class="filter-chips" data-category="tags"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filters-footer">
+      <button class="btn-reset-filters" id="resetFiltersBtn">Reset All Filters</button>
+    </div>
+  </div>
 
   <script src="popup.js"></script>
 </body>
 </html>
-

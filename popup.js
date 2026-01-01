@@ -1,5 +1,8 @@
-// Popup script for batch status display
+// Popup script for batch status display and filter management
 
+// ============================================
+// DOM Elements
+// ============================================
 const content = document.getElementById('content');
 const batchList = document.getElementById('batchList');
 const emptyState = document.getElementById('emptyState');
@@ -7,15 +10,30 @@ const footer = document.getElementById('footer');
 const retryAllBtn = document.getElementById('retryAllBtn');
 const clearAllBtn = document.getElementById('clearAllBtn');
 const notificationsToggle = document.getElementById('notificationsToggle');
+const filterBadge = document.getElementById('filterBadge');
+const resetFiltersBtn = document.getElementById('resetFiltersBtn');
 
+// ============================================
+// State
+// ============================================
 let batches = [];
-let expandedBatchIds = new Set(); // Track which batches are expanded
+let filters = null;
+let expandedBatchIds = new Set();
+let expandedFilterCategories = new Set();
 let isFirstRender = true;
 
-// Load batch status on popup open
+// ============================================
+// Initialization
+// ============================================
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadBatchStatus();
-  await loadNotificationSetting();
+  await Promise.all([
+    loadBatchStatus(),
+    loadFilters(),
+    loadNotificationSetting()
+  ]);
+  
+  initTabNavigation();
+  initFilterEventListeners();
   
   // Listen for real-time updates from background script
   browser.runtime.onMessage.addListener((message) => {
@@ -23,21 +41,51 @@ document.addEventListener('DOMContentLoaded', async () => {
       batches = message.batches || [];
       renderBatches();
     }
+    if (message.action === 'filterUpdate') {
+      filters = message.filters;
+      renderFilters();
+    }
   });
 });
 
-// Load notification setting
+// ============================================
+// Tab Navigation
+// ============================================
+function initTabNavigation() {
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.dataset.tab;
+      
+      // Update button states
+      tabBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // Update tab content visibility
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      document.getElementById(`${tabId}Tab`).classList.add('active');
+    });
+  });
+}
+
+// ============================================
+// Notification Settings
+// ============================================
 async function loadNotificationSetting() {
   const data = await browser.storage.local.get({ notificationsEnabled: true });
   notificationsToggle.checked = data.notificationsEnabled;
 }
 
-// Handle notifications toggle change
 notificationsToggle.addEventListener('change', async () => {
   await browser.storage.local.set({ notificationsEnabled: notificationsToggle.checked });
 });
 
-// Load batch status from background script
+// ============================================
+// Batch Management
+// ============================================
 async function loadBatchStatus() {
   try {
     const response = await browser.runtime.sendMessage({ action: 'getBatchStatus' });
@@ -48,7 +96,6 @@ async function loadBatchStatus() {
   }
 }
 
-// Render all batches
 function renderBatches() {
   if (batches.length === 0) {
     emptyState.style.display = 'flex';
@@ -84,10 +131,9 @@ function renderBatches() {
   batchList.replaceChildren(fragment);
 
   // Attach event listeners
-  attachEventListeners();
+  attachBatchEventListeners();
 }
 
-// Render a single batch
 function renderBatch(batch, expanded = false) {
   const stats = getStats(batch.scenes);
   const time = formatTime(batch.timestamp);
@@ -121,6 +167,12 @@ function renderBatch(batch, expanded = false) {
     errorStat.className = 'batch-stat error';
     errorStat.textContent = `${stats.error} failed`;
     statsDiv.appendChild(errorStat);
+  }
+  if (stats.filtered > 0) {
+    const filteredStat = document.createElement('span');
+    filteredStat.className = 'batch-stat filtered';
+    filteredStat.textContent = `${stats.filtered} filtered`;
+    statsDiv.appendChild(filteredStat);
   }
   if (stats.pending > 0) {
     const pendingStat = document.createElement('span');
@@ -156,7 +208,6 @@ function renderBatch(batch, expanded = false) {
   return batchEl;
 }
 
-// Render a single scene row
 function renderScene(batchId, scene) {
   const shortId = scene.stashId.substring(0, 8);
   const showRetry = scene.status === 'error';
@@ -181,7 +232,8 @@ function renderScene(batchId, scene) {
   sceneEl.appendChild(sceneInfo);
 
   const badge = document.createElement('span');
-  badge.className = `status-badge ${scene.status}${scene.error ? ' error-tooltip' : ''}`;
+  const hasTooltip = scene.error || scene.status === 'filtered';
+  badge.className = `status-badge ${scene.status}${hasTooltip ? ' error-tooltip' : ''}`;
   if (scene.error) {
     badge.dataset.error = scene.error;
   }
@@ -200,16 +252,15 @@ function renderScene(batchId, scene) {
   return sceneEl;
 }
 
-// Get statistics for a batch
 function getStats(scenes) {
   return {
     success: scenes.filter(s => ['added', 'searched', 'exists'].includes(s.status)).length,
     error: scenes.filter(s => s.status === 'error').length,
+    filtered: scenes.filter(s => s.status === 'filtered').length,
     pending: scenes.filter(s => ['waiting', 'adding'].includes(s.status)).length
   };
 }
 
-// Get human-readable status label
 function getStatusLabel(status) {
   const labels = {
     waiting: 'Waiting',
@@ -217,12 +268,12 @@ function getStatusLabel(status) {
     added: 'Added',
     searched: 'Searched',
     exists: 'Exists',
-    error: 'Error'
+    error: 'Error',
+    filtered: 'Filtered'
   };
   return labels[status] || status;
 }
 
-// Format timestamp to relative or absolute time
 function formatTime(timestamp) {
   const date = new Date(timestamp);
   const now = new Date();
@@ -242,8 +293,7 @@ function formatTime(timestamp) {
   });
 }
 
-// Attach event listeners to rendered elements
-function attachEventListeners() {
+function attachBatchEventListeners() {
   // Batch header toggle
   document.querySelectorAll('.batch-header').forEach(header => {
     header.addEventListener('click', () => {
@@ -251,7 +301,6 @@ function attachEventListeners() {
       const batchId = batchEl.dataset.batchId;
       batchEl.classList.toggle('expanded');
       
-      // Track expanded state
       if (batchEl.classList.contains('expanded')) {
         expandedBatchIds.add(batchId);
       } else {
@@ -310,3 +359,217 @@ clearAllBtn.addEventListener('click', async () => {
   }
 });
 
+// ============================================
+// Filter Management
+// ============================================
+async function loadFilters() {
+  try {
+    const response = await browser.runtime.sendMessage({ action: 'getFilters' });
+    filters = response?.filters || null;
+    renderFilters();
+  } catch (error) {
+    console.error('[Popup] Error loading filters:', error);
+  }
+}
+
+function renderFilters() {
+  if (!filters) return;
+  
+  const categories = ['studios', 'performers', 'names', 'tags'];
+  let totalFilterCount = 0;
+  
+  categories.forEach(category => {
+    const config = filters[category];
+    if (!config) return;
+    
+    const count = config.values?.length || 0;
+    totalFilterCount += count;
+    
+    // Update count badge
+    const countEl = document.querySelector(`[data-count="${category}"]`);
+    if (countEl) {
+      countEl.textContent = count;
+      countEl.style.display = count > 0 ? 'inline' : 'none';
+    }
+    
+    // Update mode select
+    const modeSelect = document.querySelector(`select[data-category="${category}"][data-setting="mode"]`);
+    if (modeSelect) {
+      modeSelect.value = config.mode || 'blocklist';
+    }
+    
+    // Update matchLogic select
+    const logicSelect = document.querySelector(`select[data-category="${category}"][data-setting="matchLogic"]`);
+    if (logicSelect) {
+      logicSelect.value = config.matchLogic || 'or';
+    }
+    
+    // Update chips
+    const chipsContainer = document.querySelector(`.filter-chips[data-category="${category}"]`);
+    if (chipsContainer) {
+      renderFilterChips(chipsContainer, category, config.values || []);
+    }
+    
+    // Restore expanded state
+    const categoryEl = document.querySelector(`.filter-category[data-category="${category}"]`);
+    if (categoryEl && expandedFilterCategories.has(category)) {
+      categoryEl.classList.add('expanded');
+    }
+  });
+  
+  // Update filter badge in tab bar
+  if (totalFilterCount > 0) {
+    filterBadge.textContent = totalFilterCount;
+    filterBadge.style.display = 'inline';
+  } else {
+    filterBadge.style.display = 'none';
+  }
+}
+
+function renderFilterChips(container, category, values) {
+  container.replaceChildren();
+  
+  if (values.length === 0) {
+    const emptyEl = document.createElement('div');
+    emptyEl.className = 'filter-empty';
+    emptyEl.textContent = 'No filters added';
+    container.appendChild(emptyEl);
+    return;
+  }
+  
+  values.forEach(value => {
+    const chip = document.createElement('div');
+    chip.className = 'filter-chip';
+    
+    const textSpan = document.createElement('span');
+    textSpan.textContent = value;
+    chip.appendChild(textSpan);
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'filter-chip-remove';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.dataset.category = category;
+    removeBtn.dataset.value = value;
+    removeBtn.addEventListener('click', () => removeFilterValue(category, value));
+    chip.appendChild(removeBtn);
+    
+    container.appendChild(chip);
+  });
+}
+
+function initFilterEventListeners() {
+  // Category header toggle
+  document.querySelectorAll('.filter-category-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const categoryEl = header.closest('.filter-category');
+      const category = categoryEl.dataset.category;
+      categoryEl.classList.toggle('expanded');
+      
+      if (categoryEl.classList.contains('expanded')) {
+        expandedFilterCategories.add(category);
+      } else {
+        expandedFilterCategories.delete(category);
+      }
+    });
+  });
+  
+  // Mode and logic select changes
+  document.querySelectorAll('.filter-control select').forEach(select => {
+    select.addEventListener('change', async () => {
+      const category = select.dataset.category;
+      const setting = select.dataset.setting;
+      const value = select.value;
+      
+      try {
+        const config = {};
+        config[setting] = value;
+        
+        await browser.runtime.sendMessage({
+          action: 'updateFilterCategory',
+          category,
+          config
+        });
+      } catch (error) {
+        console.error('[Popup] Error updating filter setting:', error);
+      }
+    });
+  });
+  
+  // Add filter buttons
+  document.querySelectorAll('.filter-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const category = btn.dataset.category;
+      const input = document.querySelector(`.filter-add-row input[data-category="${category}"]`);
+      const value = input?.value?.trim();
+      
+      if (value) {
+        addFilterValue(category, value);
+        input.value = '';
+      }
+    });
+  });
+  
+  // Enter key on filter inputs
+  document.querySelectorAll('.filter-add-row input').forEach(input => {
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const category = input.dataset.category;
+        const value = input.value.trim();
+        
+        if (value) {
+          addFilterValue(category, value);
+          input.value = '';
+        }
+      }
+    });
+  });
+  
+  // Reset filters button
+  resetFiltersBtn.addEventListener('click', async () => {
+    if (confirm('Reset all filters to defaults?')) {
+      try {
+        const response = await browser.runtime.sendMessage({ action: 'resetFilters' });
+        if (response?.filters) {
+          filters = response.filters;
+          renderFilters();
+        }
+      } catch (error) {
+        console.error('[Popup] Error resetting filters:', error);
+      }
+    }
+  });
+}
+
+async function addFilterValue(category, value) {
+  try {
+    const response = await browser.runtime.sendMessage({
+      action: 'addFilterValue',
+      category,
+      value
+    });
+    
+    if (response?.filters) {
+      filters = response.filters;
+      renderFilters();
+    }
+  } catch (error) {
+    console.error('[Popup] Error adding filter value:', error);
+  }
+}
+
+async function removeFilterValue(category, value) {
+  try {
+    const response = await browser.runtime.sendMessage({
+      action: 'removeFilterValue',
+      category,
+      value
+    });
+    
+    if (response?.filters) {
+      filters = response.filters;
+      renderFilters();
+    }
+  } catch (error) {
+    console.error('[Popup] Error removing filter value:', error);
+  }
+}
