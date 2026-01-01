@@ -232,12 +232,14 @@ function renderScene(batchId, scene) {
   sceneEl.appendChild(sceneInfo);
 
   const badge = document.createElement('span');
-  const hasTooltip = scene.error || scene.status === 'filtered';
-  badge.className = `status-badge ${scene.status}${hasTooltip ? ' error-tooltip' : ''}`;
-  if (scene.error) {
-    badge.dataset.error = scene.error;
-  }
+  badge.className = `status-badge ${scene.status}`;
   badge.textContent = getStatusLabel(scene.status);
+  
+  // Add native title tooltip for error/filter reasons
+  if (scene.error) {
+    badge.title = scene.error;
+  }
+  
   sceneEl.appendChild(badge);
 
   if (showRetry) {
