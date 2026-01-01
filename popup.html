@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StashDB to Whisparr</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #e8e8e8;
+      width: 400px;
+      max-height: 500px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    header img {
+      width: 32px;
+      height: 32px;
+    }
+
+    header h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      background: linear-gradient(90deg, #e94560, #ff6b6b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      flex: 1;
+    }
+
+    .toggle-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .toggle-label {
+      font-size: 0.7rem;
+      color: #8892b0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .toggle {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 3px;
+      bottom: 3px;
+      background: #64748b;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: rgba(233, 69, 96, 0.3);
+    }
+
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+      background: #e94560;
+    }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: #64748b;
+      text-align: center;
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .batch {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .batch-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+    }
+
+    .batch-header:hover {
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    .batch-time {
+      font-size: 0.75rem;
+      color: #8892b0;
+    }
+
+    .batch-stats {
+      display: flex;
+      gap: 8px;
+      font-size: 0.7rem;
+    }
+
+    .batch-stat {
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .batch-stat.success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .batch-stat.error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .batch-stat.pending { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+
+    .batch-scenes {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .batch.expanded .batch-scenes {
+      max-height: 1000px;
+    }
+
+    .batch-header .chevron {
+      transition: transform 0.3s ease;
+    }
+
+    .batch.expanded .batch-header .chevron {
+      transform: rotate(180deg);
+    }
+
+    .scene {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .scene:last-child {
+      border-bottom: none;
+    }
+
+    .scene-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .scene-title {
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #ccd6f6;
+    }
+
+    .scene-id {
+      font-size: 0.7rem;
+      color: #64748b;
+      font-family: monospace;
+    }
+
+    .status-badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .status-badge.waiting {
+      background: rgba(148, 163, 184, 0.2);
+      color: #94a3b8;
+    }
+
+    .status-badge.adding {
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+      animation: pulse 1.5s infinite;
+    }
+
+    .status-badge.added {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .status-badge.searched {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+    }
+
+    .status-badge.exists {
+      background: rgba(107, 114, 128, 0.2);
+      color: #9ca3af;
+    }
+
+    .status-badge.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .scene-retry {
+      background: transparent;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #ef4444;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .scene-retry:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    .scene-retry:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    footer {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    footer button {
+      flex: 1;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-retry {
+      background: linear-gradient(135deg, #e94560 0%, #c23a52 100%);
+      color: white;
+    }
+
+    .btn-retry:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(233, 69, 96, 0.3);
+    }
+
+    .btn-clear {
+      background: rgba(255, 255, 255, 0.1);
+      color: #94a3b8;
+    }
+
+    .btn-clear:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.15);
+      color: #e8e8e8;
+    }
+
+    footer button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .error-tooltip {
+      position: relative;
+    }
+
+    .error-tooltip:hover::after {
+      content: attr(data-error);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 10px;
+      background: #1f2937;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      font-size: 0.7rem;
+      color: #ef4444;
+      white-space: nowrap;
+      z-index: 10;
+      margin-bottom: 4px;
+    }
+
+    /* Scrollbar styling */
+    .content::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .content::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .content::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+    }
+
+    .content::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="icons/icon-48.svg" alt="StashDB to Whisparr">
+    <h1>StashDB to Whisparr</h1>
+    <div class="toggle-wrapper">
+      <span class="toggle-label">Notify</span>
+      <label class="toggle">
+        <input type="checkbox" id="notificationsToggle" checked>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+  </header>
+
+  <div class="content" id="content">
+    <div class="empty-state" id="emptyState">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+      </svg>
+      <p>No batch operations yet</p>
+      <p style="font-size: 0.75rem; margin-top: 4px;">Right-click on StashDB to add scenes</p>
+    </div>
+    <div id="batchList"></div>
+  </div>
+
+  <footer id="footer" style="display: none;">
+    <button class="btn-retry" id="retryAllBtn" disabled>Retry All Failed</button>
+    <button class="btn-clear" id="clearAllBtn">Clear All</button>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+

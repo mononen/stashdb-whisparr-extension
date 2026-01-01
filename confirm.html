@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Confirm Bulk Add</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      text-align: center;
+      max-width: 320px;
+    }
+    
+    .icon {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+    }
+    
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    
+    .scene-count {
+      font-size: 36px;
+      font-weight: 700;
+      color: #7c3aed;
+      margin: 12px 0;
+    }
+    
+    p {
+      font-size: 14px;
+      color: #a0a0a0;
+      margin-bottom: 24px;
+    }
+    
+    .buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+    
+    button {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .confirm-btn {
+      background: #7c3aed;
+      color: white;
+    }
+    
+    .confirm-btn:hover {
+      background: #6d28d9;
+      transform: translateY(-1px);
+    }
+    
+    .cancel-btn {
+      background: #374151;
+      color: #d1d5db;
+    }
+    
+    .cancel-btn:hover {
+      background: #4b5563;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="icons/icon-48.svg" alt="Whisparr" class="icon">
+    <h1>Add to Whisparr</h1>
+    <div class="scene-count" id="sceneCount">0</div>
+    <p>scenes will be added to your Whisparr library</p>
+    <div class="buttons">
+      <button class="cancel-btn" id="cancelBtn">Cancel</button>
+      <button class="confirm-btn" id="confirmBtn">Add All</button>
+    </div>
+  </div>
+  <script src="confirm.js"></script>
+</body>
+</html>
+

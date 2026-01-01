@@ -1,0 +1,47 @@
+{
+  "manifest_version": 2,
+  "name": "StashDB to Whisparr",
+  "version": "1.1",
+  "description": "Add scenes from StashDB to your Whisparr server with a right-click",
+  "permissions": [
+    "contextMenus",
+    "activeTab",
+    "storage",
+    "notifications",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+  "content_scripts": [{
+    "matches": ["*://stashdb.org/*"],
+    "js": ["content.js"],
+    "run_at": "document_start"
+  }],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "48": "icons/icon-48.svg",
+    "96": "icons/icon-96.svg"
+  },
+  "browser_action": {
+    "default_icon": {
+      "48": "icons/icon-48.svg",
+      "96": "icons/icon-96.svg"
+    },
+    "default_popup": "popup.html",
+    "default_title": "StashDB to Whisparr"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "stashdb-whisparr@extension",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}
+
